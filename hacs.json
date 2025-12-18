@@ -1,0 +1,6 @@
+{
+    "name": "PTZ Camera Card",
+    "render_readme": true,
+    "filename": "ptz-camera-card.js",
+    "content_in_root": true
+}
