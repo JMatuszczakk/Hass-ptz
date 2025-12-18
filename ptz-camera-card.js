@@ -1,6 +1,6 @@
 /**
  * PTZ Camera Card
- * A Home Assistant Lovelace card with camera display and pan-tilt joystick
+ * A Home Assistant Lovelace card with camera display and pan-tilt arrow controls
  */
 
 const LitElement = Object.getPrototypeOf(
@@ -22,19 +22,13 @@ class PTZCameraCard extends LitElement {
         return {
             hass: { type: Object },
             config: { type: Object },
-            _joystickActive: { type: Boolean },
-            _joystickX: { type: Number },
-            _joystickY: { type: Number },
+            _activeDirection: { type: String },
         };
     }
 
     constructor() {
         super();
-        this._joystickActive = false;
-        this._joystickX = 0;
-        this._joystickY = 0;
-        this._lastDirection = null;
-        this._moveInterval = null;
+        this._activeDirection = null;
     }
 
     static getConfigElement() {
@@ -56,7 +50,7 @@ class PTZCameraCard extends LitElement {
             title: "",
             service: "onvif.ptz",
             service_data: {},
-            joystick_size: 120,
+            button_size: 48,
             move_speed: 0.5,
             ...config,
         };
@@ -108,120 +102,76 @@ class PTZCameraCard extends LitElement {
         font-size: 1.2em;
       }
 
-      .joystick-container {
+      .ptz-controls {
         position: absolute;
         bottom: 16px;
         right: 16px;
         z-index: 10;
+        display: grid;
+        grid-template-columns: repeat(3, var(--button-size, 48px));
+        grid-template-rows: repeat(3, var(--button-size, 48px));
+        gap: 4px;
       }
 
-      .joystick-base {
-        width: var(--joystick-size, 120px);
-        height: var(--joystick-size, 120px);
-        border-radius: 50%;
-        background: rgba(0, 0, 0, 0.5);
+      .ptz-button {
+        width: var(--button-size, 48px);
+        height: var(--button-size, 48px);
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.6);
         backdrop-filter: blur(4px);
         border: 2px solid rgba(255, 255, 255, 0.3);
-        position: relative;
-        touch-action: none;
-        cursor: pointer;
-      }
-
-      .joystick-base::before {
-        content: "";
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 30%;
-        height: 30%;
-        border-radius: 50%;
-        background: rgba(255, 255, 255, 0.1);
-      }
-
-      .joystick-handle {
-        position: absolute;
-        width: 40%;
-        height: 40%;
-        border-radius: 50%;
-        background: linear-gradient(145deg, #ffffff, #e0e0e0);
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        transition: transform 0.1s ease-out;
-        pointer-events: none;
-      }
-
-      .joystick-handle.active {
-        background: linear-gradient(145deg, #3498db, #2980b9);
-      }
-
-      .direction-indicators {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        pointer-events: none;
-      }
-
-      .direction-indicator {
-        position: absolute;
-        font-size: 12px;
-        color: rgba(255, 255, 255, 0.7);
-        font-weight: bold;
-      }
-
-      .direction-indicator.up {
-        top: 4px;
-        left: 50%;
-        transform: translateX(-50%);
-      }
-
-      .direction-indicator.down {
-        bottom: 4px;
-        left: 50%;
-        transform: translateX(-50%);
-      }
-
-      .direction-indicator.left {
-        left: 8px;
-        top: 50%;
-        transform: translateY(-50%);
-      }
-
-      .direction-indicator.right {
-        right: 8px;
-        top: 50%;
-        transform: translateY(-50%);
-      }
-
-      .stop-button {
-        position: absolute;
-        bottom: 16px;
-        right: calc(var(--joystick-size, 120px) + 32px);
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background: rgba(231, 76, 60, 0.8);
-        border: 2px solid rgba(255, 255, 255, 0.3);
         color: white;
-        font-size: 16px;
+        font-size: 20px;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        backdrop-filter: blur(4px);
-        z-index: 10;
+        transition: all 0.15s ease;
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: manipulation;
       }
 
-      .stop-button:hover {
-        background: rgba(231, 76, 60, 1);
+      .ptz-button:hover {
+        background: rgba(52, 152, 219, 0.7);
+        border-color: rgba(255, 255, 255, 0.5);
       }
 
-      .stop-button:active {
+      .ptz-button:active,
+      .ptz-button.active {
+        background: rgba(52, 152, 219, 0.9);
         transform: scale(0.95);
+      }
+
+      .ptz-button.up {
+        grid-column: 2;
+        grid-row: 1;
+      }
+
+      .ptz-button.left {
+        grid-column: 1;
+        grid-row: 2;
+      }
+
+      .ptz-button.stop {
+        grid-column: 2;
+        grid-row: 2;
+        background: rgba(231, 76, 60, 0.7);
+        font-size: 16px;
+      }
+
+      .ptz-button.stop:hover {
+        background: rgba(231, 76, 60, 0.9);
+      }
+
+      .ptz-button.right {
+        grid-column: 3;
+        grid-row: 2;
+      }
+
+      .ptz-button.down {
+        grid-column: 2;
+        grid-row: 3;
       }
     `;
     }
@@ -232,11 +182,11 @@ class PTZCameraCard extends LitElement {
         }
 
         const cameraEntity = this.hass.states[this.config.camera_entity];
-        const joystickSize = this.config.joystick_size;
+        const buttonSize = this.config.button_size;
 
         return html`
       <ha-card>
-        <div class="card-container" style="--joystick-size: ${joystickSize}px">
+        <div class="card-container" style="--button-size: ${buttonSize}px">
           ${this.config.title
                 ? html`<div class="card-header">${this.config.title}</div>`
                 : ""}
@@ -256,32 +206,43 @@ class PTZCameraCard extends LitElement {
                   </div>
                 `}
 
-            <button class="stop-button" @click="${this._handleStop}" title="Stop">
-              ■
-            </button>
-
-            <div class="joystick-container">
-              <div
-                class="joystick-base"
-                @mousedown="${this._handleJoystickStart}"
-                @touchstart="${this._handleJoystickStart}"
-                @mousemove="${this._handleJoystickMove}"
-                @touchmove="${this._handleJoystickMove}"
-                @mouseup="${this._handleJoystickEnd}"
-                @touchend="${this._handleJoystickEnd}"
-                @mouseleave="${this._handleJoystickEnd}"
-              >
-                <div class="direction-indicators">
-                  <span class="direction-indicator up">▲</span>
-                  <span class="direction-indicator down">▼</span>
-                  <span class="direction-indicator left">◀</span>
-                  <span class="direction-indicator right">▶</span>
-                </div>
-                <div
-                  class="joystick-handle ${this._joystickActive ? 'active' : ''}"
-                  style="transform: translate(calc(-50% + ${this._joystickX}px), calc(-50% + ${this._joystickY}px))"
-                ></div>
-              </div>
+            <div class="ptz-controls">
+              <button
+                class="ptz-button up ${this._activeDirection === 'UP' ? 'active' : ''}"
+                @mousedown="${() => this._handleButtonPress('UP')}"
+                @mouseup="${this._handleButtonRelease}"
+                @mouseleave="${this._handleButtonRelease}"
+                @touchstart="${(e) => { e.preventDefault(); this._handleButtonPress('UP'); }}"
+                @touchend="${this._handleButtonRelease}"
+              >▲</button>
+              <button
+                class="ptz-button left ${this._activeDirection === 'LEFT' ? 'active' : ''}"
+                @mousedown="${() => this._handleButtonPress('LEFT')}"
+                @mouseup="${this._handleButtonRelease}"
+                @mouseleave="${this._handleButtonRelease}"
+                @touchstart="${(e) => { e.preventDefault(); this._handleButtonPress('LEFT'); }}"
+                @touchend="${this._handleButtonRelease}"
+              >◀</button>
+              <button
+                class="ptz-button stop"
+                @click="${this._handleStop}"
+              >■</button>
+              <button
+                class="ptz-button right ${this._activeDirection === 'RIGHT' ? 'active' : ''}"
+                @mousedown="${() => this._handleButtonPress('RIGHT')}"
+                @mouseup="${this._handleButtonRelease}"
+                @mouseleave="${this._handleButtonRelease}"
+                @touchstart="${(e) => { e.preventDefault(); this._handleButtonPress('RIGHT'); }}"
+                @touchend="${this._handleButtonRelease}"
+              >▶</button>
+              <button
+                class="ptz-button down ${this._activeDirection === 'DOWN' ? 'active' : ''}"
+                @mousedown="${() => this._handleButtonPress('DOWN')}"
+                @mouseup="${this._handleButtonRelease}"
+                @mouseleave="${this._handleButtonRelease}"
+                @touchstart="${(e) => { e.preventDefault(); this._handleButtonPress('DOWN'); }}"
+                @touchend="${this._handleButtonRelease}"
+              >▼</button>
             </div>
           </div>
         </div>
@@ -304,99 +265,21 @@ class PTZCameraCard extends LitElement {
         e.target.src = `/api/camera_proxy/${entity}`;
     }
 
-    _handleJoystickStart(e) {
-        e.preventDefault();
-        this._joystickActive = true;
-        this._handleJoystickMove(e);
+    _handleButtonPress(direction) {
+        this._activeDirection = direction;
+        const speed = this.config.move_speed;
+        this._callPTZService(direction, speed, speed);
     }
 
-    _handleJoystickMove(e) {
-        if (!this._joystickActive) return;
-        e.preventDefault();
-
-        const joystickBase = this.shadowRoot.querySelector(".joystick-base");
-        const rect = joystickBase.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-
-        let clientX, clientY;
-        if (e.touches && e.touches.length > 0) {
-            clientX = e.touches[0].clientX;
-            clientY = e.touches[0].clientY;
-        } else {
-            clientX = e.clientX;
-            clientY = e.clientY;
-        }
-
-        const maxDistance = rect.width / 2 - 20;
-        let deltaX = clientX - centerX;
-        let deltaY = clientY - centerY;
-
-        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-        if (distance > maxDistance) {
-            deltaX = (deltaX / distance) * maxDistance;
-            deltaY = (deltaY / distance) * maxDistance;
-        }
-
-        this._joystickX = deltaX;
-        this._joystickY = deltaY;
-
-        this._processJoystickPosition(deltaX, deltaY, maxDistance);
-    }
-
-    _handleJoystickEnd(e) {
-        if (!this._joystickActive) return;
-        e.preventDefault();
-
-        this._joystickActive = false;
-        this._joystickX = 0;
-        this._joystickY = 0;
-        this._lastDirection = null;
-
-        if (this._moveInterval) {
-            clearInterval(this._moveInterval);
-            this._moveInterval = null;
-        }
-
-        this._callPTZService("STOP", 0, 0);
-    }
-
-    _processJoystickPosition(x, y, maxDistance) {
-        const normalizedX = x / maxDistance;
-        const normalizedY = -y / maxDistance; // Invert Y for intuitive control
-
-        const threshold = 0.3;
-        let direction = null;
-        let panSpeed = 0;
-        let tiltSpeed = 0;
-
-        if (Math.abs(normalizedX) > threshold || Math.abs(normalizedY) > threshold) {
-            if (Math.abs(normalizedX) > Math.abs(normalizedY)) {
-                direction = normalizedX > 0 ? "RIGHT" : "LEFT";
-                panSpeed = Math.abs(normalizedX) * this.config.move_speed;
-            } else {
-                direction = normalizedY > 0 ? "UP" : "DOWN";
-                tiltSpeed = Math.abs(normalizedY) * this.config.move_speed;
-            }
-
-            // Also handle diagonal movement
-            if (Math.abs(normalizedX) > threshold && Math.abs(normalizedY) > threshold) {
-                panSpeed = Math.abs(normalizedX) * this.config.move_speed;
-                tiltSpeed = Math.abs(normalizedY) * this.config.move_speed;
-                if (normalizedX > 0 && normalizedY > 0) direction = "UP_RIGHT";
-                else if (normalizedX < 0 && normalizedY > 0) direction = "UP_LEFT";
-                else if (normalizedX > 0 && normalizedY < 0) direction = "DOWN_RIGHT";
-                else direction = "DOWN_LEFT";
-            }
-        }
-
-        if (direction && direction !== this._lastDirection) {
-            this._lastDirection = direction;
-            this._callPTZService(direction, panSpeed, tiltSpeed);
+    _handleButtonRelease() {
+        if (this._activeDirection) {
+            this._activeDirection = null;
+            this._callPTZService("STOP", 0, 0);
         }
     }
 
     _handleStop() {
+        this._activeDirection = null;
         this._callPTZService("STOP", 0, 0);
     }
 
@@ -430,22 +313,6 @@ class PTZCameraCard extends LitElement {
                         break;
                     case "RIGHT":
                         serviceData.pan = panSpeed;
-                        break;
-                    case "UP_LEFT":
-                        serviceData.pan = -panSpeed;
-                        serviceData.tilt = tiltSpeed;
-                        break;
-                    case "UP_RIGHT":
-                        serviceData.pan = panSpeed;
-                        serviceData.tilt = tiltSpeed;
-                        break;
-                    case "DOWN_LEFT":
-                        serviceData.pan = -panSpeed;
-                        serviceData.tilt = -tiltSpeed;
-                        break;
-                    case "DOWN_RIGHT":
-                        serviceData.pan = panSpeed;
-                        serviceData.tilt = -tiltSpeed;
                         break;
                 }
             }
@@ -566,14 +433,14 @@ class PTZCameraCardEditor extends LitElement {
       </div>
 
       <div class="form-row">
-        <label>Joystick Size (px)</label>
+        <label>Button Size (px)</label>
         <input
           type="number"
-          .value="${this._config.joystick_size || 120}"
+          .value="${this._config.button_size || 48}"
           @input="${this._valueChanged}"
-          .configValue="${"joystick_size"}"
-          min="60"
-          max="200"
+          .configValue="${"button_size"}"
+          min="32"
+          max="80"
         />
       </div>
 
@@ -599,7 +466,7 @@ class PTZCameraCardEditor extends LitElement {
         const configValue = target.configValue;
         let value = target.value;
 
-        if (configValue === "joystick_size") {
+        if (configValue === "button_size") {
             value = parseInt(value, 10);
         } else if (configValue === "move_speed") {
             value = parseFloat(value);
@@ -630,6 +497,6 @@ window.customCards = window.customCards || [];
 window.customCards.push({
     type: "ptz-camera-card",
     name: "PTZ Camera Card",
-    description: "A camera card with pan-tilt joystick control",
+    description: "A camera card with pan-tilt arrow controls",
     preview: true,
 });
